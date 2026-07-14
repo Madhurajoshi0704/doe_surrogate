@@ -90,3 +90,24 @@ def test_agent_prompts_routing():
     res_d = agent.process_prompt("Design shampoo with viscosity 45 and ph 6.2")
     assert res_d["intent"] == "design"
     assert res_d["predicted_properties"]["viscosity_sec"] > 0
+
+def test_cost_optimization():
+    from src.models.optimizer import CostPerformanceOptimizer
+    opt = CostPerformanceOptimizer()
+    opt.engine = DualModelingEngine(model_path=TEST_MODEL)
+    opt.engine.load_models()
+    
+    # Run optimization
+    inputs, cost, properties = opt.solve_constrained_minimum_cost(
+        min_visc=20.0, max_visc=50.0, min_ph=5.5, max_ph=6.8, min_foam=110.0
+    )
+    
+    assert inputs is not None
+    assert cost > 0.0
+    assert 20.0 <= properties['viscosity_sec'] <= 50.0
+    assert properties['ph'] >= 5.3
+    
+    # Generate Pareto front
+    pareto = opt.generate_pareto_front(min_visc=20.0, max_visc=50.0, min_ph=5.5, max_ph=6.8, points=5)
+    assert not pareto.empty
+    assert "Cost_100g" in pareto.columns

@@ -242,6 +242,44 @@ def create_pdf(filename="DOE_Surrogate_Project_Architecture.pdf"):
         code_style
     ))
     
+    story.append(PageBreak())
+    
+    # New Section 7: Pareto Optimization
+    story.append(Paragraph("7. Multi-Objective Cost-Performance Optimization", h1_style))
+    story.append(Paragraph(
+        "A central challenge in FMCG formulation is balancing performance (e.g. initial foam height) "
+        "with the raw material unit costs of ingredients (SLES = 0.12 INR/g, CAPB = 0.15 INR/g, NaCl = 0.02 INR/g). "
+        "This system implements a constrained cost optimization algorithm to minimize cost while satisfying physical specs.",
+        body_style
+    ))
+    
+    story.append(Paragraph("Differential Evolution Solver", h2_style))
+    story.append(Paragraph(
+        "Using scipy.optimize.differential_evolution, the system searches the design space boundary for the "
+        "lowest-cost formulation. Non-linear constraints (viscosity, pH, foam) are enforced using a penalty function:",
+        body_style
+    ))
+    
+    story.append(Paragraph(
+        "def penalty_objective(factors):<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;sles, capb, nacl = factors<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;cost = (sles * 0.12) + (capb * 0.15) + (nacl * 0.02)<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;preds = self.engine.predict('RSM', inputs)<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;penalty = 0.0<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;if preds['viscosity_sec'] < min_visc: penalty += (preds['viscosity_sec'] - min_visc)**2 * 50<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;if preds['ph'] < min_ph or preds['ph'] > max_ph: penalty += (preds['ph'] - target_ph)**2 * 1000<br/>"
+        "&nbsp;&nbsp;&nbsp;&nbsp;return cost + penalty",
+        code_style
+    ))
+    
+    story.append(Paragraph("Pareto Front Analysis", h2_style))
+    story.append(Paragraph(
+        "By varying the target foam height constraint using the epsilon-constraint method, the solver generates "
+        "a Pareto Front curve of Cost vs. Performance. This allows R&D managers to select a formulation choice "
+        "based on target tierings (Budget, Balanced, or Premium Performance), making technical trade-offs clear to business stakeholders.",
+        body_style
+    ))
+    
     doc.build(story, onFirstPage=draw_cover_page, onLaterPages=draw_header_footer)
     print(f"PDF Successfully compiled: {filename}")
 

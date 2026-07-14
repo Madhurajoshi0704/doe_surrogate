@@ -7,7 +7,6 @@ import plotly.express as px
 from src.database.lims_db import init_lims_db, get_lims_dataframe
 from src.models.dual_modeling import DualModelingEngine
 from src.agent.lab_copilot import LabCopilotAgent
-from src.models.optimizer import CostPerformanceOptimizer
 
 # Set Page Config
 st.set_page_config(
@@ -61,10 +60,9 @@ def load_application_resources():
     engine = DualModelingEngine()
     engine.load_models()
     agent = LabCopilotAgent()
-    optimizer = CostPerformanceOptimizer()
-    return db_path, engine, agent, optimizer
+    return db_path, engine, agent
 
-db_path, engine, agent, optimizer = load_application_resources()
+db_path, engine, agent = load_application_resources()
 
 # Top Banner
 st.markdown("""
@@ -79,7 +77,7 @@ st.sidebar.image("https://img.icons8.com/color/96/chemistry.png", width=70)
 st.sidebar.markdown("### **R&D Workflow Stack**")
 tab_selection = st.sidebar.radio(
     "Choose Module:",
-    ["📊 Model Validation & DOE Metrics", "🔬 Formulation Simulator", "📈 Sensitivity Curves", "💰 Cost-Performance Pareto Optimization", "💬 AI Lab Copilot (Copilot Studio)"]
+    ["📊 Model Validation & DOE Metrics", "🔬 Formulation Simulator", "📈 Sensitivity Curves", "💬 AI Lab Copilot (Copilot Studio)"]
 )
 
 st.sidebar.markdown("---")
@@ -304,115 +302,8 @@ elif tab_selection == "📈 Sensitivity Curves":
         st.plotly_chart(fig, use_container_width=True)
 
 
-# ----------------- MODULE 4: COST-PERFORMANCE OPTIMIZATION -----------------
-elif tab_selection == "💰 Cost-Performance Pareto Optimization":
-    st.subheader("💰 Multi-Objective Cost-Performance Optimization")
-    st.write(
-        "FMCG product design requires balancing performance attributes with formulation raw material costs. "
-        "Every raw material adds to the unit cost (SLES=0.12 INR/g, CAPB=0.15 INR/g, NaCl=0.02 INR/g). "
-        "This optimizer uses **scipy.optimize.differential_evolution** to search the design space for the "
-        "lowest-cost formulation that satisfies your performance constraints."
-    )
-    
-    col_opt_in, col_opt_out = st.columns([1, 2])
-    
-    with col_opt_in:
-        st.markdown("#### **1. Target Performance Specifications**")
-        min_visc_opt = st.slider("Min Viscosity Target (Sec)", 10.0, 40.0, 20.0)
-        max_visc_opt = st.slider("Max Viscosity Target (Sec)", 40.0, 75.0, 50.0)
-        min_ph_opt = st.slider("Min pH Target", 5.0, 6.2, 5.5, 0.1)
-        max_ph_opt = st.slider("Max pH Target", 6.2, 7.5, 6.8, 0.1)
-        min_foam_opt = st.slider("Min Initial Foam (mm)", 80.0, 160.0, 120.0)
-        
-        run_opt = st.button("💰 Solve Cheapest Formula")
-        
-    with col_opt_out:
-        if run_opt:
-            st.markdown("#### **2. Optimal Recipe & Cost Summary**")
-            opt_inputs, cost, properties = optimizer.solve_constrained_minimum_cost(
-                min_visc_opt, max_visc_opt, min_ph_opt, max_ph_opt, min_foam_opt
-            )
-            
-            # Baseline midpoint cost calculation
-            mid_cost = (11.5 * 0.12) + (4.0 * 0.15) + (2.0 * 0.02)
-            cost_saving = ((mid_cost - cost) / mid_cost) * 100.0
-            
-            scol1, scol2 = st.columns(2)
-            with scol1:
-                st.success(f"**Optimal Batch Cost:** {cost:.3f} INR / 100g")
-                st.metric("Cost Reduction vs. Baseline", f"{cost_saving:.1f}%")
-                
-                recipe_df = pd.DataFrame([{
-                    "SLES % (Primary Surfactant)": f"{opt_inputs['SLES_pct']}% w/w",
-                    "CAPB % (Co-Surfactant)": f"{opt_inputs['CAPB_pct']}% w/w",
-                    "NaCl % (Electrolyte)": f"{opt_inputs['NaCl_pct']}% w/w",
-                    "Water (Balance)": f"{opt_inputs['water_pct']}% w/w"
-                }]).T
-                recipe_df.columns = ["Formula Value"]
-                st.table(recipe_df)
-                
-            with scol2:
-                st.info("Predicted Properties for Optimized Formula:")
-                properties_df = pd.DataFrame([{
-                    "Viscosity (Efflux time)": f"{properties['viscosity_sec']:.1f} Sec (Target: {min_visc_opt}-{max_visc_opt})",
-                    "pH Level": f"{properties['ph']:.2f} (Target: {min_ph_opt}-{max_ph_opt})",
-                    "Initial Foam Height": f"{properties['foam_height_initial_mm']:.1f} mm (Target: > {min_foam_opt})",
-                    "5-Min Foam Stability": f"{properties['foam_height_5min_mm']:.1f} mm"
-                }]).T
-                properties_df.columns = ["Simulation Output"]
-                st.table(properties_df)
 
-    st.markdown("---")
-    st.markdown("#### **3. Cost-Performance Pareto Front (Trade-off Curve)**")
-    st.write(
-        "By varying the target foam height constraint, we map the **Pareto Front** — the boundary of "
-        "mathematically optimal formulas where you cannot improve performance (foam height) without increasing cost."
-    )
-    
-    if st.button("📈 Compute Pareto Front"):
-        with st.spinner("Calculating optimal boundary points..."):
-            pareto_df = optimizer.generate_pareto_front(min_visc_opt, max_visc_opt, min_ph_opt, max_ph_opt)
-            
-            if not pareto_df.empty:
-                col_chart_p, col_table_p = st.columns([2, 1])
-                
-                with col_chart_p:
-                    fig_p = px.line(
-                        pareto_df,
-                        x="Cost_100g",
-                        y="ActualFoam",
-                        markers=True,
-                        labels={"Cost_100g": "Formulation Cost (INR per 100g batch)", "ActualFoam": "Initial Foam Height (mm)"},
-                        title="R&D Pareto Front: Cost vs. Performance Trade-off"
-                    )
-                    # Style chart
-                    fig_p.update_traces(line=dict(color="#059669", width=3), marker=dict(size=8, color="#0F172A"))
-                    st.plotly_chart(fig_p, use_container_width=True)
-                    
-                with col_table_p:
-                    st.markdown("**Key Trade-off Highlights:**")
-                    st.write("Below are three distinct business choices extracted from the Pareto Front:")
-                    
-                    # Highlight 3 choices
-                    budget_idx = 0
-                    premium_idx = len(pareto_df) - 1
-                    balanced_idx = len(pareto_df) // 2
-                    
-                    highlights = []
-                    for idx, label in [(budget_idx, "Budget Option"), (balanced_idx, "Balanced Option"), (premium_idx, "Premium Performance")]:
-                        row = pareto_df.iloc[idx]
-                        highlights.append({
-                            "Tier": label,
-                            "Cost (INR)": f"{row['Cost_100g']:.3f}",
-                            "Foam (mm)": f"{row['ActualFoam']:.1f}",
-                            "SLES %": f"{row['SLES_pct']:.2f}%",
-                            "CAPB %": f"{row['CAPB_pct']:.2f}%"
-                        })
-                    st.dataframe(pd.DataFrame(highlights), hide_index=True)
-            else:
-                st.error("No valid Pareto Front found matching viscosity/pH targets.")
-
-# ----------------- MODULE 5: AI LAB COPILOT -----------------
+# ----------------- MODULE 4: AI LAB COPILOT -----------------
 else:
     st.subheader("💬 AI Lab Copilot Agent")
     st.write("Ask natural language queries to search the LIMS experiment database, predict properties, or optimize recipes.")
